@@ -37,6 +37,8 @@ from .t2fnorm_trainer import T2FNormTrainer
 from .reweightood_trainer import ReweightOODTrainer
 from .ascood_trainer import ASCOODTrainer
 
+from .der_trainer import DERTrainer
+
 
 def get_trainer(net, train_loader: DataLoader, val_loader: DataLoader,
                 config: Config):
@@ -74,6 +76,7 @@ def get_trainer(net, train_loader: DataLoader, val_loader: DataLoader,
             't2fnorm': T2FNormTrainer,
             'reweightood': ReweightOODTrainer,
             'ascood': ASCOODTrainer,
+            'der': DERTrainer
         }
         if config.trainer.name in ['cider', 'npos']:
             return trainers[config.trainer.name](net, train_loader, val_loader,
