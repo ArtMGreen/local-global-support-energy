@@ -51,3 +51,4 @@ from .grood import GrOODPostprocessor
 from .vra_postprocessor import VRAPostprocessor
 from .cfood_postprocessor import CFOODPostprocessor
 
+from .advlift_postprocessor import AdvLiftPostprocessor

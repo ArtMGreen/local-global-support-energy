@@ -46,6 +46,8 @@ from .relation_postprocessor import RelationPostprocessor
 from .grood import GrOODPostprocessor
 from .vra_postprocessor import VRAPostprocessor
 
+from .advlift_postprocessor import AdvLiftPostprocessor
+
 
 def get_postprocessor(config: Config):
     postprocessors = {
@@ -94,6 +96,8 @@ def get_postprocessor(config: Config):
         't2fnorm': T2FNormPostprocessor,
         'grood': GrOODPostprocessor,
         'vra': VRAPostprocessor,
+
+        'advlift': AdvLiftPostprocessor,
     }
 
     return postprocessors[config.postprocessor.name](config)

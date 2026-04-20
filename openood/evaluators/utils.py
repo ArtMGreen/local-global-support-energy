@@ -10,6 +10,10 @@ from .ood_evaluator import OODEvaluator
 from .osr_evaluator import OSREvaluator
 from .patchcore_evaluator import PatchCoreEvaluator
 
+from .advlift_evaluator import AdvLiftEvaluator
+
+
+
 
 def get_evaluator(config: Config):
     evaluators = {
@@ -21,6 +25,8 @@ def get_evaluator(config: Config):
         'ad': ADEvaluator,
         'mos': MOSEvaluator,
         'ece': ECEEvaluator,
-        'osr': OSREvaluator
+        'osr': OSREvaluator,
+        
+        'advlift': AdvLiftEvaluator
     }
     return evaluators[config.evaluator.name](config)

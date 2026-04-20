@@ -14,6 +14,8 @@ from .train_opengan_pipeline import TrainOpenGanPipeline
 from .train_pipeline import TrainPipeline
 from .test_ood_pipeline_aps import TestOODPipelineAPS
 
+from .test_advlift_pipeline import TestAdvLiftPipeline
+
 
 def get_pipeline(config: Config):
     pipelines = {
@@ -28,7 +30,9 @@ def get_pipeline(config: Config):
         'train_oe': TrainOEPipeline,
         'train_opengan': TrainOpenGanPipeline,
         'train_arplgan': TrainARPLGANPipeline,
-        'test_ood_aps': TestOODPipelineAPS
+        'test_ood_aps': TestOODPipelineAPS,
+
+        'test_advlift': TestAdvLiftPipeline
     }
 
     return pipelines[config.pipeline.name](config)
