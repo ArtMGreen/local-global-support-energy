@@ -73,7 +73,7 @@ class FGSM:
     
         ranges = max_vals - min_vals
     
-        x_adv = x_orig - self.alpha * ranges * dL_dx.sign()
+        x_adv = x_orig + self.alpha * ranges * dL_dx.sign()
         x_adv = torch.clamp(x_adv, min_vals, max_vals)
     
         if was_training:
