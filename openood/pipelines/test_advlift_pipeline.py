@@ -29,4 +29,4 @@ class TestAdvLiftPipeline:
         # start calculating accuracy
         print('\nStart evaluation...', flush=True)
         test_metrics = evaluator.eval_advlift(net, test_loader, postprocessor)
-        print('\nComplete Evaluation, AdvLift {:.2f}'.format(test_metrics['advlift']), flush=True)
+        print('\nComplete Evaluation, AdvLift {:.2f}, ASR {:.2f}%'.format(test_metrics['advlift'], 100 * test_metrics['asr']), flush=True)

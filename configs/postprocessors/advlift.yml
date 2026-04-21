@@ -3,7 +3,7 @@ postprocessor:
   APS_mode: False
   postprocessor_args:
     temperature: 1
-    alpha: 8
+    alpha: 16  # out of 255
   postprocessor_sweep:
     temperature_list: [1]
-    alpha: [8]
+    alpha: [16]

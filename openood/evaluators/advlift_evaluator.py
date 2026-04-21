@@ -34,10 +34,11 @@ class AdvLiftEvaluator(BaseEvaluator):
         """
         net.eval()
         
-        _, conf_list, _ = postprocessor.inference(net, id_data_loader, progress=True)
+        pred_list, conf_list, _ = postprocessor.inference(net, id_data_loader, progress=True)
 
         advlift = float(np.mean(conf_list))
-        metrics = {"advlift": advlift}
+        asr = float(np.mean(pred_list))  # ASR - attack success rate
+        metrics = {"advlift": advlift, "asr": asr}
 
-        print(f"AdvLift: {advlift}")
+        print(f"AdvLift: {advlift}, succ atk rate: {(100*asr):.2f}%")
         return metrics

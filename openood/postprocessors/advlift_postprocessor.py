@@ -40,7 +40,7 @@ class AdvLiftPostprocessor(BasePostprocessor):
         E_clean = -self.temperature * torch.logsumexp(logits_clean / self.temperature, dim=1)
         E_adv = -self.temperature * torch.logsumexp(logits_adv / self.temperature, dim=1)
         conf = E_adv - E_clean
-        return pred_clean, conf
+        return (pred_clean != pred_adv), conf
 
     def set_hyperparam(self, hyperparam: list):
         self.temperature = hyperparam[0]
