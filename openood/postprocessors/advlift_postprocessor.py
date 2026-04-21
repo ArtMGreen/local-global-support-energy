@@ -20,7 +20,7 @@ class AdvLiftPostprocessor(BasePostprocessor):
         self.pixel_min = torch.tensor([(0 - m) / s for m, s in zip(self.input_mean, self.input_std)])
         self.pixel_max = torch.tensor([(1 - m) / s for m, s in zip(self.input_mean, self.input_std)])
 
-        self.adversary = FGSM(8/255, F.cross_entropy, self.pixel_min, self.pixel_max)
+        self.adversary = FGSM(self.args.alpha/255, F.cross_entropy, self.pixel_min, self.pixel_max)
         
         self.args_dict = self.config.postprocessor.postprocessor_sweep
 
