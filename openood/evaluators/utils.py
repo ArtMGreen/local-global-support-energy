@@ -11,6 +11,7 @@ from .osr_evaluator import OSREvaluator
 from .patchcore_evaluator import PatchCoreEvaluator
 
 from .advlift_evaluator import AdvLiftEvaluator
+from .bbr_evaluator import BBREvaluator
 
 
 
@@ -27,6 +28,7 @@ def get_evaluator(config: Config):
         'ece': ECEEvaluator,
         'osr': OSREvaluator,
         
-        'advlift': AdvLiftEvaluator
+        'advlift': AdvLiftEvaluator,
+        'bbr': BBREvaluator
     }
     return evaluators[config.evaluator.name](config)
