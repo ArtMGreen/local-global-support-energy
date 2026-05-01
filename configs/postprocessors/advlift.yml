@@ -3,7 +3,13 @@ postprocessor:
   APS_mode: False
   postprocessor_args:
     temperature: 1
-    alpha: 16  # out of 255
   postprocessor_sweep:
     temperature_list: [1]
-    alpha: [16]
+
+adversary:
+  name: pgd
+  adversary_args:
+    alpha: 8  # out of 255
+    epsilon: 1  # out of 255, PGD only
+    steps: 20  # PGD only
+    

@@ -30,15 +30,23 @@ class AdvLiftEvaluator(BaseEvaluator):
                      postprocessor: BasePostprocessor,
                     ) -> dict:
         """
-        Compute AdvLift = [E(f(x_adv)) - E(f(x))].mean() over the dataset.
+        Compute AdvLift = [E(f(x_adv)) - E(f(x))] distribution, attack success rate (ASR) and flip rate (FR).
+
+        FR is computed as a fraction of all the predictions that were successfully flipped, while ASR considers previously correct predictions only.
         """
         net.eval()
         
-        pred_list, conf_list, _ = postprocessor.inference(net, id_data_loader, progress=True)
+        pred_clean_list, pred_adv_list, conf_list, label_list = postprocessor.inference(net, id_data_loader, progress=True)
+        flip_list = (pred_clean_list != pred_adv_list)
+        clean_correct_list = (pred_clean_list == label_list)
+        adv_correct_list = (pred_adv_list == label_list)
+        
+        fr = float(np.mean(flip_list))
+        asr = float(np.mean(flip_list[clean_correct_list]))
+        clean_acc = float(np.mean(clean_correct_list))
+        robust_acc = float(np.mean(clean_correct_list & adv_correct_list))  # i.e. if an example was failed while clean, it won't count after attack
+        
+        metrics = {"advlift": conf_list, "asr": asr, "fr": fr, "clean_acc": clean_acc, "robust_acc": robust_acc}
 
-        advlift = float(np.mean(conf_list))
-        asr = float(np.mean(pred_list))  # ASR - attack success rate
-        metrics = {"advlift": advlift, "asr": asr}
-
-        print(f"AdvLift: {advlift}, succ atk rate: {(100*asr):.2f}%")
+        print(f"AdvLift (mean): {float(np.mean(conf_list))}, ASR: {(100*asr):.2f}%, FR: {(100*fr):.2f}%, ACC (clean): {clean_acc:.5f}, ACC (robust): {robust_acc:.5f}")
         return metrics
