@@ -53,4 +53,4 @@ class TestBBRPipeline:
         
         # Show the plot
         # plt.show()
-        plt.savefig('energy_levels_on_bridges.png', dpi=300, bbox_inches='tight')
+        plt.savefig(f'{self.config.output_dir}/energy_levels_on_bridges.png', dpi=300, bbox_inches='tight')
