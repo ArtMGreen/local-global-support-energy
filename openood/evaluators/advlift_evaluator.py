@@ -91,5 +91,5 @@ class AdvLiftEvaluator(BaseEvaluator):
         df.to_parquet(save_path, index=False)
         print(f"Per-sample results saved to {save_path}")
 
-        print(f"AdvLift (mean): {float(np.mean(conf_list))}, ASR: {(100*asr):.2f}%, FR: {(100*fr):.2f}%, ACC (clean): {clean_acc:.5f}, ACC (robust): {robust_acc:.5f}")
+        # print(f"AdvLift (mean): {float(np.mean(conf_list))}, ASR: {(100*asr):.2f}%, FR: {(100*fr):.2f}%, ACC (clean): {clean_acc:.5f}, ACC (robust): {robust_acc:.5f}")
         return metrics

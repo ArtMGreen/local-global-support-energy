@@ -44,10 +44,10 @@ class AdvLiftPostprocessor(BasePostprocessor):
             probas_clean = torch.softmax(logits_clean, dim=1)
             _, pred_clean = torch.max(probas_clean, dim=1)
 
-        if label:
-            data_adv = self.adversary.attack(net, data, label)
-        else:
+        if label is None:
             data_adv = self.adversary.attack(net, data, pred_clean)
+        else:
+            data_adv = self.adversary.attack(net, data, label)
         
         with torch.no_grad():
             logits_adv = net(data_adv)
@@ -127,7 +127,7 @@ class FGSM:
         return x_adv.detach()
 
     def description(self):
-        return f"FGSM(εε={(self.eps):.5f}≈{(self.eps * 255):.1f}/255)"
+        return f"FGSM(ε={(self.eps):.5f}≈{(self.eps * 255):.1f}/255)"
 
 
 
