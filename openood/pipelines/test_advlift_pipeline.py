@@ -5,6 +5,7 @@ from openood.postprocessors import get_postprocessor
 from openood.utils import setup_logger
 
 import numpy as np
+import pandas as pd
 
 
 class TestAdvLiftPipeline:
@@ -40,6 +41,46 @@ class TestAdvLiftPipeline:
         asr = test_metrics['asr']
         clean_acc = test_metrics['clean_acc']
         robust_acc = test_metrics['robust_acc']
+
+        # Build results row
+        results_row = {
+            "advlift_mean": advlift_mean,
+            "advlift_Q1": q25,
+            "advlift_median": q50,
+            "advlift_Q3": q75,
+            "asr": asr,
+            "fr": fr,
+            "clean_acc": clean_acc,
+            "robust_acc": robust_acc,
+        }
+        
+        # Add config parameters
+        common_args = self.config.adversary.common_args
+        pgd_args = self.config.adversary.pgd_args
+        
+        results_row["adversary"] = self.config.adversary.name
+        results_row["attacked_label"] = common_args.label_source
+        results_row["eps"] = common_args.eps
+        if self.config.adversary.name == "fgsm":
+            results_row["step_size"] = None
+            results_row["steps"] = None
+            results_row["random_start"] = None
+        else:
+            results_row["step_size"] = pgd_args.step_size
+            results_row["steps"] = pgd_args.steps
+            results_row["random_start"] = pgd_args.random_start
+        results_row["seed"] = self.config.seed
+        results_row["model"] = self.config.network.name
+        results_row["checkpoint"] = self.config.network.checkpoint
+        results_row["dataset"] = self.config.dataset.name
+        
+        # Write to CSV
+        save_dir = self.config.output_dir
+        csv_path = save_dir + "/aggregated_results.csv"
+        df_row = pd.DataFrame([results_row])
+        df_row.to_csv(csv_path, index=False)
+        
+        print(f"Results saved to {csv_path}")
 
         print(f"\nEvaluation complete!\nAdvLift: mean={advlift_mean}, Q1={q25:.5f}, median={q50:.5f}, Q3={q75:.5f}, ASR: {(100*asr):.2f}%, FR: {(100*fr):.2f}%, ACC (clean): {clean_acc:.5f}, ACC (robust): {robust_acc:.5f}", flush=True)
 

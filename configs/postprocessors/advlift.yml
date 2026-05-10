@@ -7,9 +7,12 @@ postprocessor:
     temperature_list: [1]
 
 adversary:
-  name: pgd
-  adversary_args:
-    alpha: 8  # out of 255
-    epsilon: 1  # out of 255, PGD only
-    steps: 20  # PGD only
+  name: pgd    # fgsm, pgd
+  common_args:
+    label_source: prediction  # ground, prediction
+    eps: 8  # overall attack radius, out of 255
+  pgd_args:
+    step_size: 1  # single step radius, out of 255
+    steps: 20
+    random_start: true
     
