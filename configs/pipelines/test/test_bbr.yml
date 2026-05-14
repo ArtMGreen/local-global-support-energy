@@ -1,4 +1,4 @@
-exp_name: "'@{dataset.name}'_'@{network.name}'_'@{pipeline.name}'_τ'@{evaluator.evaluator_args.tau}'_n'@{evaluator.evaluator_args.grid_pts}'_'@{mark}'/s'@{seed}'"
+exp_name: "'@{dataset.name}'_'@{network.name}'_'@{pipeline.name}'_whiten'@{evaluator.evaluator_args.whiten_features}'_τ'@{evaluator.evaluator_args.tau}'_'@{evaluator.evaluator_args.grid_pts}'pts_top'@{evaluator.evaluator_args.top_n}'pairs_'@{mark}'/s'@{seed}'"
 output_dir: ./results/
 save_output: True
 merge_option: default # disabled if 'save_output' is False
@@ -19,8 +19,9 @@ pipeline:
 evaluator:
   name: bbr
   evaluator_args:
-    tau: 0.1
+    tau: 0.2
+    whiten_features: true
     temperature: 1
-    grid_pts: 201
+    grid_pts: 401
     top_n: 100
-    intra_classpair_reduction: min
+    # intra_classpair_reduction: min
