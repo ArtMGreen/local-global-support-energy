@@ -32,6 +32,9 @@ class BBREvaluator(BaseEvaluator):
         self.top_n = config.evaluator.evaluator_args.top_n
         # self.intra_classpair_reduction = config.evaluator.evaluator_args.intra_classpair_reduction
         self.whiten_features = config.evaluator.evaluator_args.whiten_features
+        self.whitened_top_n_selection = config.evaluator.evaluator_args.whitened_top_n_selection
+        if self.whitened_top_n_selection and not self.whiten_features:
+            raise ValueError("Cannot do Top-N selection in whitened features if the features are not whitened in the first place.")
 
     def total_inference(self, net, dataloader):
         """Return all (features, predictions, labels) as CPU tensors."""
@@ -52,9 +55,9 @@ class BBREvaluator(BaseEvaluator):
                 labels_list.append(y)
         return torch.cat(feats_list, dim=0), torch.cat(preds_list, dim=0), torch.cat(labels_list, dim=0)
 
-    def whiten(self, features, epsilon=1e-6):
+    def compute_whitening(self, features, epsilon=1e-6):
         """
-        ZCA-whitening, eigvals < eps are treated as zeroes
+        Computes feature mean and ZCA-whitening matrix. Eigvals < eps are treated as zeroes
         
         Args:
             features: shape (n_samples, n_features)
@@ -82,14 +85,16 @@ class BBREvaluator(BaseEvaluator):
         inv_sqrt_eigvals[significant] = 1.0 / torch.sqrt(eigvals[significant])
         inv_sqrt_eigvals_matrix = torch.diag(inv_sqrt_eigvals)
         whitening_matrix = eigvecs @ inv_sqrt_eigvals_matrix @ eigvecs.T
-        
-        whitened = centered @ whitening_matrix.T
-        
-        return whitened, mean, whitening_matrix, restoring_matrix
 
-    def restore(self, whitened_features, R, mean):
+        return whitening_matrix, restoring_matrix, mean
+
+    def whiten(self, features, W, feature_mean):
+        whitened = (features - feature_mean) @ W.T
+        return whitened
+
+    def restore(self, whitened_features, R, feature_mean):
         "Restores whitened features into their original space"
-        return whitened_features @ R.T + mean
+        return whitened_features @ R.T + feature_mean
 
     def energy_from_features(self, features, fc, restore: bool, R, mean):
         """return E = -T * logsumexp(fc(features)/T)."""
@@ -100,7 +105,7 @@ class BBREvaluator(BaseEvaluator):
             logits / self.temperature, dim=1
         )
 
-    def BBR_for_single_class_pair(self, feats_A, feats_B, fc, restore: bool, R, mean):
+    def BBR_for_single_class_pair(self, feats_A, feats_B, fc, W, R, feature_mean):
         """
         feats_A : (nA, D) GPU tensor
         feats_B : (nB, D) GPU tensor
@@ -109,8 +114,14 @@ class BBREvaluator(BaseEvaluator):
         """
         nA, nB = feats_A.shape[0], feats_B.shape[0]
 
-        # pairwise Euclidean distances (hopefully on GPU, control for that is outside)
-        dists = torch.cdist(feats_A, feats_B, p=2)  # (nA, nB)
+        if self.whiten_features and self.whitened_top_n_selection:
+            feats_A, feats_B = self.whiten(feats_A, W, feature_mean), self.whiten(feats_B, W, feature_mean)
+            dists = torch.cdist(feats_A, feats_B, p=2)  # (nA, nB)
+        elif self.whiten_features and not self.whitened_top_n_selection:
+            dists = torch.cdist(feats_A, feats_B, p=2)  # (nA, nB)
+            feats_A, feats_B = self.whiten(feats_A, W, feature_mean), self.whiten(feats_B, W, feature_mean)
+        else:
+            dists = torch.cdist(feats_A, feats_B, p=2)  # (nA, nB)
 
         # top‑N closest pairs (flatten then pick because torch.topk apparently can't return 2-indices)
         flat_dists = dists.view(-1)
@@ -126,8 +137,8 @@ class BBREvaluator(BaseEvaluator):
             u = feats_A[iA:iA+1]  # (1, D)
             v = feats_B[iB:iB+1]
 
-            nrg_u = self.energy_from_features(u, fc, restore, R, mean).item()
-            nrg_v = self.energy_from_features(v, fc, restore, R, mean).item()
+            nrg_u = self.energy_from_features(u, fc, self.whiten_features, R, feature_mean).item()
+            nrg_v = self.energy_from_features(v, fc, self.whiten_features, R, feature_mean).item()
 
             tau0_values.append(nrg_u)
             tau1_values.append(nrg_v)
@@ -136,7 +147,7 @@ class BBREvaluator(BaseEvaluator):
             coarse_gamma = torch.linspace(self.tau, 1-self.tau, self.grid_pts,
                                           device=u.device).unsqueeze(1)
             interp = (1 - coarse_gamma) * u + coarse_gamma * v
-            coarse_nrg = self.energy_from_features(interp, fc, restore, R, mean)
+            coarse_nrg = self.energy_from_features(interp, fc, self.whiten_features, R, feature_mean)
             best_idx = torch.argmin(coarse_nrg).item()
             gamma_approx = coarse_gamma[best_idx].item()
             curves_values.append(coarse_nrg.detach().cpu().numpy())
@@ -148,7 +159,7 @@ class BBREvaluator(BaseEvaluator):
             fine_gamma = torch.linspace(left, right, self.grid_pts,
                                         device=u.device).unsqueeze(1)
             interp = (1 - fine_gamma) * u + fine_gamma * v
-            nrg = self.energy_from_features(interp, fc, restore, R, mean)
+            nrg = self.energy_from_features(interp, fc, self.whiten_features, R, feature_mean)
             min_nrg = torch.min(nrg).item()
 
             bbr_val = min_nrg - 0.5 * (nrg_u + nrg_v)
@@ -164,12 +175,8 @@ class BBREvaluator(BaseEvaluator):
             "tau1s": tau1_values
         }
 
-    def eval_bbr(self, net, id_data_loader):
+    def eval_bbr(self, net, id_data_loader, W, R, feature_mean):
         features, preds, labels = self.total_inference(net, id_data_loader)
-        if self.whiten_features:
-            features, mean_feature, W, R = self.whiten(features)
-        else:
-            mean_feature, W, R = torch.tensor([0]), torch.tensor([0]), torch.tensor([0])
         labels = labels.numpy()
         classes = np.unique(labels)
         fc = net.get_fc_layer()
@@ -193,7 +200,7 @@ class BBREvaluator(BaseEvaluator):
                 single_pair_dict = self.BBR_for_single_class_pair(
                     feats_i, feats_j, fc,
                     # reduction=self.intra_classpair_reduction,
-                    self.whiten_features, R.cuda(), mean_feature.cuda()
+                    W.cuda(), R.cuda(), feature_mean.cuda()
                 )
                 results_dict[(classes[i], classes[j])] = single_pair_dict
 

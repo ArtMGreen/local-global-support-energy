@@ -21,7 +21,8 @@ evaluator:
   evaluator_args:
     tau: 0.2
     whiten_features: true
+    whitened_top_n_selection: true
     temperature: 1
     grid_pts: 401
     top_n: 100
-    # intra_classpair_reduction: min
+    # intra_classpair_reduction: min - parameter discarded, both reductions are computed and plotted for convenience
