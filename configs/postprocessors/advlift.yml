@@ -7,12 +7,12 @@ postprocessor:
     temperature_list: [1]
 
 adversary:
-  name: pgd    # fgsm, pgd
+  name: pgd                   # fgsm, pgd
   common_args:
-    label_source: prediction  # ground, prediction
-    eps: 8  # overall attack radius, out of 255
+    label_source: prediction  # chooses if "ground" or "prediction" labels are attacked
+    eps: 8                    # overall attack radius in pixel space, out of 255
   pgd_args:
-    step_size: 1  # single step radius, out of 255
+    step_size: 1              # single step radius in pixel space, out of 255
     steps: 20
-    random_start: true
+    random_start: true        # Madry et al. defines PGD with a random start, but it is possible to omit it if needed
     

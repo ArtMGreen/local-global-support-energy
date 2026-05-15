@@ -85,11 +85,13 @@ class AdvLiftEvaluator(BaseEvaluator):
         df["checkpoint"] = self.config.network.checkpoint
         df["dataset"] = self.config.dataset.name
         
-        # Save to Parquet
+        # Save to Parquet and CSV
         save_dir = self.config.output_dir
-        save_path = save_dir + "/raw_results.parquet"
-        df.to_parquet(save_path, index=False)
-        print(f"Per-sample results saved to {save_path}")
+        save_path_parquet = save_dir + "/raw_results.parquet"
+        save_path_csv = save_dir + "/raw_results.csv"
+        df.to_parquet(save_path_parquet, index=False)
+        df.to_csv(save_path_csv, index=False)
+        print(f"Per-sample results saved to {save_path_parquet} and {save_path_csv}")
 
         # print(f"AdvLift (mean): {float(np.mean(conf_list))}, ASR: {(100*asr):.2f}%, FR: {(100*fr):.2f}%, ACC (clean): {clean_acc:.5f}, ACC (robust): {robust_acc:.5f}")
         return metrics
