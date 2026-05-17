@@ -20,11 +20,6 @@ from .base_evaluator import BaseEvaluator
 
 class BBREvaluator(BaseEvaluator):
     def __init__(self, config: Config):
-        """BBR Evaluator.
-
-        Args:
-            config (Config): Config file
-        """
         super(BBREvaluator, self).__init__(config)
         self.tau = self.config.evaluator.evaluator_args.tau
         self.temperature = self.config.evaluator.evaluator_args.temperature
@@ -89,8 +84,7 @@ class BBREvaluator(BaseEvaluator):
         return whitening_matrix, restoring_matrix, mean
 
     def whiten(self, features, W, feature_mean):
-        whitened = (features - feature_mean) @ W.T
-        return whitened
+        return (features - feature_mean) @ W.T
 
     def restore(self, whitened_features, R, feature_mean):
         "Restores whitened features into their original space"
@@ -251,7 +245,7 @@ class BBREvaluator(BaseEvaluator):
         
         # 2. Create aggregated mean plot
         plt.figure(figsize=(10, 6))
-        all_mean_curves = []
+        all_mean_curves = list()
         all_mean_tau0s, all_mean_tau1s = list(), list()
         
         for ith_key, data in results_dict.items():

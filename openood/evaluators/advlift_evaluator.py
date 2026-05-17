@@ -19,11 +19,6 @@ from .base_evaluator import BaseEvaluator
 
 class AdvLiftEvaluator(BaseEvaluator):
     def __init__(self, config: Config):
-        """AdvLift Evaluator.
-
-        Args:
-            config (Config): Config file
-        """
         super(AdvLiftEvaluator, self).__init__(config)
 
     def eval_advlift(self,
