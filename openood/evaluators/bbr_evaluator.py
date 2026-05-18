@@ -30,6 +30,7 @@ class BBREvaluator(BaseEvaluator):
         self.whitened_top_n_selection = config.evaluator.evaluator_args.whitened_top_n_selection
         if self.whitened_top_n_selection and not self.whiten_features:
             raise ValueError("Cannot do Top-N selection in whitened features if the features are not whitened in the first place.")
+        self.layers_before_logits = self.config.evaluator.evaluator_args.layers_before_logits
 
     def total_inference(self, net, dataloader):
         """Return all (features, predictions, labels) as CPU tensors."""
@@ -42,15 +43,18 @@ class BBREvaluator(BaseEvaluator):
                 else:
                     x, y = batch[0], batch[1]
                 x = x.cuda()
-                logits, feats = net(x, return_feature=True)
+                logits, feats = net(x, return_with_layers_left=self.layers_before_logits)
                 probas = torch.softmax(logits, dim=1)
                 _, preds = torch.max(probas, dim=1)
-                feats_list.append(feats.cpu())
+                self.original_shape = feats.shape[1:]
+                # features will be flattened
+                feats_list.append(feats.view(feats.size(0), -1).cpu())
                 preds_list.append(preds.cpu())
                 labels_list.append(y)
+        # torch.cat(dim=0) won't break anything as long as 0th dim is batch_dim
         return torch.cat(feats_list, dim=0), torch.cat(preds_list, dim=0), torch.cat(labels_list, dim=0)
 
-    def compute_whitening(self, features, epsilon=1e-6):
+    def compute_whitening(self, features, epsilon=1e-8):
         """
         Computes feature mean and ZCA-whitening matrix. Eigvals < eps are treated as zeroes
         
@@ -90,20 +94,21 @@ class BBREvaluator(BaseEvaluator):
         "Restores whitened features into their original space"
         return whitened_features @ R.T + feature_mean
 
-    def energy_from_features(self, features, fc, restore: bool, R, mean):
-        """return E = -T * logsumexp(fc(features)/T)."""
+    def energy_from_features(self, features, net, restore: bool, R, mean):
+        """return E = -T * logsumexp(continue_forward(features)/T)."""
         if restore:
             features = self.restore(features, R, mean)
-        logits = fc(features)
+        shaped_features = features.view(features.size(0), *self.original_shape)
+        logits = net.continue_forward(shaped_features, layers_left=self.layers_before_logits)
         return -self.temperature * torch.logsumexp(
             logits / self.temperature, dim=1
         )
 
-    def BBR_for_single_class_pair(self, feats_A, feats_B, fc, W, R, feature_mean):
+    def BBR_for_single_class_pair(self, feats_A, feats_B, net, W, R, feature_mean):
         """
         feats_A : (nA, D) GPU tensor
         feats_B : (nB, D) GPU tensor
-        fc      : final linear layer
+        net     : nn.Module with continue_forward() support
         returns  scalar BBR metric for this class pair.
         """
         nA, nB = feats_A.shape[0], feats_B.shape[0]
@@ -131,8 +136,8 @@ class BBREvaluator(BaseEvaluator):
             u = feats_A[iA:iA+1]  # (1, D)
             v = feats_B[iB:iB+1]
 
-            nrg_u = self.energy_from_features(u, fc, self.whiten_features, R, feature_mean).item()
-            nrg_v = self.energy_from_features(v, fc, self.whiten_features, R, feature_mean).item()
+            nrg_u = self.energy_from_features(u, net, self.whiten_features, R, feature_mean).item()
+            nrg_v = self.energy_from_features(v, net, self.whiten_features, R, feature_mean).item()
 
             tau0_values.append(nrg_u)
             tau1_values.append(nrg_v)
@@ -141,7 +146,7 @@ class BBREvaluator(BaseEvaluator):
             coarse_gamma = torch.linspace(self.tau, 1-self.tau, self.grid_pts,
                                           device=u.device).unsqueeze(1)
             interp = (1 - coarse_gamma) * u + coarse_gamma * v
-            coarse_nrg = self.energy_from_features(interp, fc, self.whiten_features, R, feature_mean)
+            coarse_nrg = self.energy_from_features(interp, net, self.whiten_features, R, feature_mean)
             best_idx = torch.argmin(coarse_nrg).item()
             gamma_approx = coarse_gamma[best_idx].item()
             curves_values.append(coarse_nrg.detach().cpu().numpy())
@@ -153,7 +158,7 @@ class BBREvaluator(BaseEvaluator):
             fine_gamma = torch.linspace(left, right, self.grid_pts,
                                         device=u.device).unsqueeze(1)
             interp = (1 - fine_gamma) * u + fine_gamma * v
-            nrg = self.energy_from_features(interp, fc, self.whiten_features, R, feature_mean)
+            nrg = self.energy_from_features(interp, net, self.whiten_features, R, feature_mean)
             min_nrg = torch.min(nrg).item()
 
             bbr_val = min_nrg - 0.5 * (nrg_u + nrg_v)
@@ -173,7 +178,6 @@ class BBREvaluator(BaseEvaluator):
         features, preds, labels = self.total_inference(net, id_data_loader)
         labels = labels.numpy()
         classes = np.unique(labels)
-        fc = net.get_fc_layer()
 
         # only features that led to correct predictions will be used
         correct_mask = (preds.numpy() == labels)
@@ -192,7 +196,7 @@ class BBREvaluator(BaseEvaluator):
                     continue
 
                 single_pair_dict = self.BBR_for_single_class_pair(
-                    feats_i, feats_j, fc,
+                    feats_i, feats_j, net,
                     # reduction=self.intra_classpair_reduction,
                     W.cuda(), R.cuda(), feature_mean.cuda()
                 )
@@ -330,7 +334,9 @@ class BBREvaluator(BaseEvaluator):
                 })
         
         df = pd.DataFrame(rows)
+        df["layers_left"] = self.layers_before_logits
         df["whitened"] = self.whiten_features
+        df["whitened_pair_selection"] = self.whitened_top_n_selection
         df["tau"] = self.tau
         df["grid_pts"] = self.grid_pts
         # df["curves_n"] = self.top_n
@@ -352,7 +358,9 @@ class BBREvaluator(BaseEvaluator):
             })
         
         df = pd.DataFrame(rows)
+        df["layers_left"] = self.layers_before_logits
         df["whitened"] = self.whiten_features
+        df["whitened_pair_selection"] = self.whitened_top_n_selection
         df["tau"] = self.tau
         df["grid_pts"] = self.grid_pts
         df["curves_n"] = self.top_n
@@ -369,7 +377,9 @@ class BBREvaluator(BaseEvaluator):
         }]
 
         df = pd.DataFrame(rows)
+        df["layers_left"] = self.layers_before_logits
         df["whitened"] = self.whiten_features
+        df["whitened_pair_selection"] = self.whitened_top_n_selection
         df["tau"] = self.tau
         df["grid_pts"] = self.grid_pts
         df["curves_n"] = self.top_n

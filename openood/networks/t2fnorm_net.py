@@ -13,18 +13,33 @@ class T2FNormNet(nn.Module):
     def set_tau(self, tau):
         self.tau = torch.tensor(tau)
 
-    def forward(self, x, return_feature=False):
-        if return_feature:
-            _, feature = self.backbone(x, return_feature=True)
+    def forward(self, x, return_with_layers_left=False):
+        if return_with_layers_left:
+            _, feature_to_return = self.backbone(x, return_with_layers_left=return_with_layers_left)
+            _, feature = self.backbone.continue_forward(feature_to_return, layers_left=return_with_layers_left, return_feature=True)
             if self.num_classes != 1000:
                 # Imagenet-1k experiment is not trained from scratch.
                 # Use temperature scaling only for models trained from scratch.
                 feature = feature / self.tau
             output = self.backbone.fc(feature)
-            return output, feature
-        _, feature = self.backbone(x, return_feature=True)
-        feature = F.normalize(feature, dim=-1) / self.tau
+            return output, feature_to_return
+        else:
+            _, feature = self.backbone(x, return_feature=True)
+            feature = F.normalize(feature, dim=-1) / self.tau
+            output = self.backbone.fc(feature)
+            return output
+
+    def continue_forward(self, feature, layers_left, return_feature=False):
+        # this line has already happened:
+        # _, feature_to_return = self.backbone(x, return_with_layers_left=return_with_layers_left)
+        _, feature = self.backbone.continue_forward(feature, layers_left=layers_left, return_feature=True)
+        if self.num_classes != 1000:
+            # Imagenet-1k experiment is not trained from scratch.
+            # Use temperature scaling only for models trained from scratch.
+            feature = feature / self.tau
         output = self.backbone.fc(feature)
+        if return_feature:
+            return output, feature
         return output
 
     def forward_ood_inference(self, x):
@@ -35,6 +50,3 @@ class T2FNormNet(nn.Module):
             feature = feature / self.tau
         output = self.backbone.fc(feature)
         return output
-
-    def get_fc_layer(self):
-        return self.backbone.fc
