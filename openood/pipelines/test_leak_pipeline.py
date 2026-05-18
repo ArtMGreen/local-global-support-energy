@@ -24,12 +24,15 @@ class TestLeakPipeline:
         return energy.numpy()
 
     def compute_eta(self, id_val_energies, ood_val_energies=None):
-        eta = np.quantile(id_val_energies, self.eta_id_coverage)
-        print(f"Energy threshold eta (covering {self.eta_id_coverage:.2f} of ID val): {eta:.4f}")
+        self.eta = np.quantile(id_val_energies, self.eta_id_coverage)
+        self.actual_id_coverage = np.mean(id_val_energies < self.eta)
+        print(f"Achieved ID coverage at eta={self.eta:.4f}: {self.actual_id_coverage:.4f} (target: {self.eta_id_coverage})")
         if ood_val_energies is not None:
-            ood_rejected = np.mean(ood_val_energies > eta)
-            print(f"OOD rejection at eta: {(100 * ood_rejected):.2f}%")
-        return eta, ood_rejected
+            self.ood_rejected = np.mean(ood_val_energies > self.eta)
+            print(f"OOD rejection at eta: {(100 * self.ood_rejected):.2f}%")
+        else:
+            self.ood_rejected = None
+        return self.eta, self.actual_id_coverage, self.ood_rejected
 
     def compute_leak_k(self, energy_histories_per_pair, eta):
         """
@@ -69,9 +72,8 @@ class TestLeakPipeline:
         # Init network
         net = get_network(self.config.network)
 
-        # Init evaluator (for bridge selection)
-        evaluator = get_evaluator(self.config)
-        self.evaluator = evaluator
+        # Init evaluator
+        self.evaluator = get_evaluator(self.config)
 
         # Init postprocessor
         postprocessor = get_postprocessor(self.config)
@@ -88,8 +90,7 @@ class TestLeakPipeline:
         print("\nComputing ID vs OOD threshold eta...")
         id_val_energies = self.compute_energy_scores(net, id_val_loader)
         ood_val_energies = self.compute_energy_scores(net, ood_val_loader)
-        eta, ood_rejected = self.compute_eta(id_val_energies, ood_val_energies)
-        self.ood_rejection = ood_rejected
+        self.compute_eta(id_val_energies, ood_val_energies)
         
         print("\nSelecting bridge pairs...")
         bridge_pairs_per_class_pair = self.evaluator.select_bridge_pairs(
@@ -101,10 +102,10 @@ class TestLeakPipeline:
             net, bridge_pairs_per_class_pair, progress=True
         )
         
-        leak_overall, leak_per_class_pair = self.compute_leak_k(energy_histories_per_pair, eta)
+        leak_overall, leak_per_class_pair = self.compute_leak_k(energy_histories_per_pair, self.eta)
 
         print("\n" + "="*60)
-        print(f"Leak Evaluation Results (eta={eta:.4f})")
+        print(f"Leak Evaluation Results (eta={self.eta:.4f})")
         print("="*60)
         print(f"{'Step':>5s} | {'Leak (overall)':>15s}")
         print("-"*25)
@@ -118,9 +119,9 @@ class TestLeakPipeline:
         print(f"Initial Leak (K=0): {leak_overall[0]:.4f}")
         print(f"Leak deterioration: {leak_overall[-1] - leak_overall[0]:.4f}")
 
-        self.save_results(leak_overall, leak_per_class_pair, energy_histories_per_pair, eta)
+        self.save_results(leak_overall, leak_per_class_pair, energy_histories_per_pair)
 
-    def save_results(self, leak_overall, leak_per_class_pair, energy_histories_per_pair, eta):
+    def save_results(self, leak_overall, leak_per_class_pair, energy_histories_per_pair):
         import pandas as pd
         import matplotlib.pyplot as plt
         
@@ -130,10 +131,12 @@ class TestLeakPipeline:
         })
         df_overall["tau"] = self.tau
         df_overall["lr"] = self.config.postprocessor.postprocessor_args.lr
-        df_overall["id_coverage"] = self.eta_id_coverage
-        df_overall["ood_rejection"] = self.ood_rejection
+        df_overall["eta"] = self.eta
+        df_overall["target_id_coverage"] = self.eta_id_coverage
+        df_overall["achieved_id_coverage"] = self.actual_id_coverage
+        df_overall["ood_rejection"] = self.ood_rejected
         df_overall["pts_per_bridge"] = self.config.postprocessor.postprocessor_args.pts_per_bridge
-        # df_overall["top_n"] = self.top_n
+        df_overall["top_n"] = self.config.evaluator.evaluator_args.top_n
         df_overall["seed"] = self.config.seed
         df_overall["model"] = self.config.network.name
         df_overall["checkpoint"] = self.config.network.checkpoint
@@ -152,11 +155,13 @@ class TestLeakPipeline:
                 })
         df_pairs = pd.DataFrame(rows)
         df_pairs["tau"] = self.tau
-        df_overall["lr"] = self.config.postprocessor.postprocessor_args.lr
-        df_overall["id_coverage"] = self.eta_id_coverage
-        df_overall["ood_rejection"] = self.ood_rejection
+        df_pairs["lr"] = self.config.postprocessor.postprocessor_args.lr
+        df_pairs["eta"] = self.eta
+        df_pairs["target_id_coverage"] = self.eta_id_coverage
+        df_pairs["achieved_id_coverage"] = self.actual_id_coverage
+        df_pairs["ood_rejection"] = self.ood_rejected
         df_pairs["pts_per_bridge"] = self.config.postprocessor.postprocessor_args.pts_per_bridge
-        # df["top_n"] = self.top_n
+        df_pairs["top_n"] = self.config.evaluator.evaluator_args.top_n
         df_pairs["seed"] = self.config.seed
         df_pairs["model"] = self.config.network.name
         df_pairs["checkpoint"] = self.config.network.checkpoint
@@ -173,7 +178,7 @@ class TestLeakPipeline:
             # Overall plot for this step
             fig, ax = plt.subplots(figsize=(8, 5))
             ax.hist(all_histories[step], bins=50, alpha=0.7, edgecolor='black')
-            ax.axvline(x=eta, color='red', linestyle='--', linewidth=2, label=f'eta={eta:.3f}')
+            ax.axvline(x=self.eta, color='red', linestyle='--', linewidth=2, label=f'eta={self.eta:.3f}')
             ax.set_title(f'Overall Energy Distribution — Step {step}')
             ax.set_xlabel('Energy')
             ax.set_ylabel('Count')
@@ -186,7 +191,7 @@ class TestLeakPipeline:
             # for (ci, cj), hist_cp in energy_histories_per_pair.items():
             #     fig, ax = plt.subplots(figsize=(8, 5))
             #     ax.hist(hist_cp[step], bins=min(50, hist_cp.shape[1] // 10), alpha=0.7, edgecolor='black')
-            #     ax.axvline(x=eta, color='red', linestyle='--', linewidth=2, label=f'eta={eta:.3f}')
+            #     ax.axvline(x=self.eta, color='red', linestyle='--', linewidth=2, label=f'eta={self.eta:.3f}')
             #     ax.set_title(f'Energy Distribution — Class {ci} vs Class {cj}, Step {step}')
             #     ax.set_xlabel('Energy')
             #     ax.set_ylabel('Count')

@@ -4,7 +4,7 @@ postprocessor:
   postprocessor_args:
     temperature: 1
     tau: 0.2
-    pts_per_bridge: 100
+    pts_per_bridge: 200
     lr: 0.1
     max_steps: 10
   postprocessor_sweep:

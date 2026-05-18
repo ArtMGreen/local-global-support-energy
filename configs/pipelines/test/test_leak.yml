@@ -22,4 +22,4 @@ evaluator:
     # whiten_features: true
     whitened_top_n_selection: false  # just please leave it false for now
     top_n: 200
-    eta_id_coverage_fraction: 0.90
+    eta_id_coverage_fraction: 0.95
