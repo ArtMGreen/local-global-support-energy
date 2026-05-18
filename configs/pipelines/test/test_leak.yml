@@ -1,0 +1,25 @@
+exp_name: "'@{dataset.name}'_'@{network.name}'_'@{pipeline.name}'-'@{postprocessor.postprocessor_args.max_steps}'_lr'@{postprocessor.postprocessor_args.lr}'_idcov'@{evaluator.evaluator_args.eta_id_coverage_fraction}'_τ'@{postprocessor.postprocessor_args.tau}'_'@{postprocessor.postprocessor_args.pts_per_bridge}'pts_top'@{evaluator.evaluator_args.top_n}'pairs_'@{mark}'/s'@{seed}'"
+output_dir: ./results/
+save_output: True
+merge_option: default # disabled if 'save_output' is False
+mark: default # to mark the version of experiment
+seed: 0
+
+num_gpus: 1
+num_workers: 4
+num_machines: 1
+machine_rank: 0
+
+network:
+  pretrained: True
+
+pipeline:
+  name: test_leak
+
+evaluator:
+  name: leak
+  evaluator_args:
+    # whiten_features: true
+    whitened_top_n_selection: false  # just please leave it false for now
+    top_n: 200
+    eta_id_coverage_fraction: 0.90

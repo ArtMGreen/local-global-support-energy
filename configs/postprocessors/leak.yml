@@ -1,0 +1,12 @@
+postprocessor:
+  name: leak
+  APS_mode: False
+  postprocessor_args:
+    temperature: 1
+    tau: 0.2
+    pts_per_bridge: 100
+    lr: 0.1
+    max_steps: 10
+  postprocessor_sweep:
+    temperature_list: [1]
+    

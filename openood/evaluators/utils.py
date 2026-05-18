@@ -12,6 +12,7 @@ from .patchcore_evaluator import PatchCoreEvaluator
 
 from .advlift_evaluator import AdvLiftEvaluator
 from .bbr_evaluator import BBREvaluator
+from .leak_evaluator import LeakEvaluator
 
 
 
@@ -29,6 +30,7 @@ def get_evaluator(config: Config):
         'osr': OSREvaluator,
         
         'advlift': AdvLiftEvaluator,
-        'bbr': BBREvaluator
+        'bbr': BBREvaluator,
+        'leak': LeakEvaluator
     }
     return evaluators[config.evaluator.name](config)

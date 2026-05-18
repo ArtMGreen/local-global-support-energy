@@ -13,7 +13,15 @@ class T2FNormNet(nn.Module):
     def set_tau(self, tau):
         self.tau = torch.tensor(tau)
 
-    def forward(self, x):
+    def forward(self, x, return_feature=False):
+        if return_feature:
+            _, feature = self.backbone(x, return_feature=True)
+            if self.num_classes != 1000:
+                # Imagenet-1k experiment is not trained from scratch.
+                # Use temperature scaling only for models trained from scratch.
+                feature = feature / self.tau
+            output = self.backbone.fc(feature)
+            return output, feature
         _, feature = self.backbone(x, return_feature=True)
         feature = F.normalize(feature, dim=-1) / self.tau
         output = self.backbone.fc(feature)
@@ -27,3 +35,6 @@ class T2FNormNet(nn.Module):
             feature = feature / self.tau
         output = self.backbone.fc(feature)
         return output
+
+    def get_fc_layer(self):
+        return self.backbone.fc

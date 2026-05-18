@@ -16,6 +16,7 @@ from .test_ood_pipeline_aps import TestOODPipelineAPS
 
 from .test_advlift_pipeline import TestAdvLiftPipeline
 from .test_bbr_pipeline import TestBBRPipeline
+from .test_leak_pipeline import TestLeakPipeline
 
 
 def get_pipeline(config: Config):
@@ -34,7 +35,8 @@ def get_pipeline(config: Config):
         'test_ood_aps': TestOODPipelineAPS,
 
         'test_advlift': TestAdvLiftPipeline,
-        'test_bbr': TestBBRPipeline
+        'test_bbr': TestBBRPipeline,
+        'test_leak': TestLeakPipeline
     }
 
     return pipelines[config.pipeline.name](config)

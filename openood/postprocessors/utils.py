@@ -47,6 +47,7 @@ from .grood import GrOODPostprocessor
 from .vra_postprocessor import VRAPostprocessor
 
 from .advlift_postprocessor import AdvLiftPostprocessor
+from .leak_postprocessor import LeakPostprocessor
 
 
 def get_postprocessor(config: Config):
@@ -98,6 +99,7 @@ def get_postprocessor(config: Config):
         'vra': VRAPostprocessor,
 
         'advlift': AdvLiftPostprocessor,
+        'leak': LeakPostprocessor
     }
 
     return postprocessors[config.postprocessor.name](config)
