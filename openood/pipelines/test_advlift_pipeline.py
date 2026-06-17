@@ -24,110 +24,119 @@ class TestAdvLiftPipeline:
         net = get_network(self.config.network)
 
         # init evaluator
-        evaluator = get_evaluator(self.config)
+        self.evaluator = get_evaluator(self.config)
 
         # init postprocessor
-        postprocessor = get_postprocessor(self.config)
+        self.postprocessor = get_postprocessor(self.config)
 
         print('\nStart evaluation...', flush=True)
-        test_metrics = evaluator.eval_advlift(net, test_loader, postprocessor)
+        groupwise_advlift, classwise_advlift = self.evaluator.eval_advlift(net, test_loader, self.postprocessor)
+        print("Evaluation complete! Plotting and writing results...", flush=True)
 
-        advlift_list = test_metrics['advlift']
-        percentiles = [25, 50, 75]
-        q25, q50, q75 = np.percentile(advlift_list, percentiles)
-        advlift_mean = float(np.mean(advlift_list))
-        
-        fr = test_metrics['fr']
-        asr = test_metrics['asr']
-        clean_acc = test_metrics['clean_acc']
-        robust_acc = test_metrics['robust_acc']
-
-        # Build results row
-        results_row = {
-            "advlift_mean": advlift_mean,
-            "advlift_Q1": q25,
-            "advlift_median": q50,
-            "advlift_Q3": q75,
-            "asr": asr,
-            "fr": fr,
-            "clean_acc": clean_acc,
-            "robust_acc": robust_acc,
-        }
-        
-        # Add config parameters
-        common_args = self.config.adversary.common_args
-        pgd_args = self.config.adversary.pgd_args
-        
-        results_row["adversary"] = self.config.adversary.name
-        results_row["attacked_label"] = common_args.label_source
-        results_row["eps"] = common_args.eps
-        if self.config.adversary.name == "fgsm":
-            results_row["step_size"] = None
-            results_row["steps"] = None
-            results_row["random_start"] = None
-        else:
-            results_row["step_size"] = pgd_args.step_size
-            results_row["steps"] = pgd_args.steps
-            results_row["random_start"] = pgd_args.random_start
-        results_row["seed"] = self.config.seed
-        results_row["model"] = self.config.network.name
-        results_row["checkpoint"] = self.config.network.checkpoint
-        results_row["dataset"] = self.config.dataset.name
+        group_df = self.generate_df(groupwise_advlift)
+        class_df = self.generate_df(classwise_advlift)
+        result_df = pd.concat([group_df, class_df], ignore_index=True)
         
         # Write to CSV
         save_dir = self.config.output_dir
         csv_path = save_dir + "/aggregated_results.csv"
-        df_row = pd.DataFrame([results_row])
-        df_row.to_csv(csv_path, index=False)
+        result_df.to_csv(csv_path, index=False)
         
         print(f"Results saved to {csv_path}")
 
-        print(f"\nEvaluation complete!\nAdvLift: mean={advlift_mean}, Q1={q25:.5f}, median={q50:.5f}, Q3={q75:.5f}, ASR: {(100*asr):.2f}%, FR: {(100*fr):.2f}%, ACC (clean): {clean_acc:.5f}, ACC (robust): {robust_acc:.5f}", flush=True)
+        groupwise_save_path = f'{self.config.output_dir}/{self.config.mark}_groupwise.png'
+        classwise_save_path = f'{self.config.output_dir}/{self.config.mark}_classwise.png'
+        self.plot_sectionwise_results(groupwise_advlift, groupwise_save_path, keys=[["overall"], ["clean-correct", "clean-wrong"], ["attack-success", "attack-fail"], ["flip-success", "flip-fail"]])
+        self.plot_sectionwise_results(classwise_advlift, classwise_save_path)
 
+    def generate_df(self, sectionwise_metrics):
+        rows = list()
+        for section_name, section_dict in sectionwise_metrics.items():
+            advlift_list = section_dict["advlift"]
+            section_rate = section_dict["rate"]
+            rate_description = section_dict["rate_description"]
+
+            percentiles = [25, 50, 75]
+            if len(advlift_list) != 0:
+                q25, q50, q75 = np.percentile(advlift_list, percentiles)
+                advlift_mean = float(np.mean(advlift_list))
+            else:
+                q25, q50, q75 = None, None, None
+                advlift_mean = None
+
+            results_row = {
+                "group": section_name,
+                "advlift_mean": advlift_mean,
+                "advlift_Q1": q25,
+                "advlift_median": q50,
+                "advlift_Q3": q75,
+                "rate": section_rate,
+                "rate_description": rate_description
+            }
+        
+            # Add config parameters
+            common_args = self.config.adversary.common_args
+            pgd_args = self.config.adversary.pgd_args
+            
+            results_row["adversary"] = self.config.adversary.name
+            results_row["attacked_label"] = common_args.label_source
+            results_row["eps"] = common_args.eps
+            if self.config.adversary.name == "pgd":
+                results_row["step_size"] = pgd_args.step_size
+                results_row["steps"] = pgd_args.steps
+                results_row["random_start"] = pgd_args.random_start
+            else:
+                results_row["step_size"] = None
+                results_row["steps"] = None
+                results_row["random_start"] = None
+            results_row["seed"] = self.config.seed
+            results_row["model"] = self.config.network.name
+            results_row["checkpoint"] = self.config.network.checkpoint
+            results_row["dataset"] = self.config.dataset.name
+            # this one probably will be convenient to sort by
+            results_row["Adversary"] = self.postprocessor.adversary.description()
+
+            rows.append(results_row)
+        return pd.DataFrame(rows)
+    
+    def plot_sectionwise_results(self, sectionwise_metrics, save_path, keys=None, figsize=(12, 12)):
         import matplotlib.pyplot as plt
+        import numpy as np
         
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+        if keys is None:
+            keys = [[key] for key in sectionwise_metrics.keys()]
         
-        # Plot 1: Histogram
-        ax1.hist(advlift_list, bins='auto', edgecolor='black', alpha=0.7, color='steelblue')
-        ax1.set_xlabel('Value')
-        ax1.set_ylabel('Frequency')
-        ax1.set_title('Histogram')
-        ax1.grid(True, alpha=0.3)
+        n_rows = len(keys)
+        fig, axes = plt.subplots(n_rows, 1, figsize=(figsize[0], figsize[1] * n_rows / 4), sharex=True)
+        if n_rows == 1:
+            axes = [axes]
         
-        # Plot 2: Quantile plot
-        sorted_data = np.sort(advlift_list)
-        p = np.linspace(0, 100, len(sorted_data))  # percentages from 0 to 100
+        for row_idx, key_group in enumerate(keys):
+            ax = axes[row_idx]
+            
+            for col_idx, group_name in enumerate(key_group):
+                if group_name not in sectionwise_metrics:
+                    continue
+                metrics = sectionwise_metrics[group_name]
+                advlift = metrics["advlift"]
+                if len(advlift) == 0:
+                    continue
+                    
+                color = plt.cm.tab10(col_idx % 10)
+                mean_val, q1, median_val, q3 = np.mean(advlift), np.percentile(advlift, 25), np.median(advlift), np.percentile(advlift, 75)
+                label = f"{group_name} ({metrics['rate_description']}={metrics['rate']:.3f})"
+                
+                ax.hist(advlift, bins=50, density=True, alpha=0.3 if len(key_group) > 1 else 0.6, color=color, edgecolor='white', label=label)
+                
+                vline_color = color if len(key_group) > 1 else 'black'
+                for val, ls, lw in [(mean_val, '-', 2), (q1, '--', 1.5), (median_val, ':', 2), (q3, '--', 1.5)]:
+                    ax.axvline(val, color=vline_color, linestyle=ls, linewidth=lw, alpha=0.6)
+            
+            ax.set_ylabel('Density')
+            ax.legend(loc='upper right')
+            ax.grid(True, alpha=0.3)
         
-        ax2.plot(p, sorted_data, 'b-', linewidth=1.5)
-        
-        # Mark and label the quantiles
-        ax2.axhline(y=q25, color='r', linestyle='--', alpha=0.2)
-        ax2.axhline(y=q50, color='g', linestyle='--', alpha=0.2)
-        ax2.axhline(y=q75, color='r', linestyle='--', alpha=0.2)
-        
-        ax2.axvline(x=25, color='r', linestyle='--', alpha=0.2)
-        ax2.axvline(x=50, color='g', linestyle='--', alpha=0.2)
-        ax2.axvline(x=75, color='r', linestyle='--', alpha=0.2)
-
-        # Add a text box with all statistics
-        stats_text = f'Q1 (25th): {q25:.4f}\nMedian (50th): {q50:.4f}\nQ3 (75th): {q75:.4f}'
-        ax2.text(0.02, 0.98, stats_text, transform=ax2.transAxes, 
-                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-        
-        # Add text labels with actual numbers
-        ax2.text(1, q25, f'Q1={q25:.4f}', ha='left', va='bottom', fontsize=9, color='red')
-        ax2.text(1, q50, f'Median={q50:.4f}', ha='left', va='bottom', fontsize=9, color='green', fontweight='bold')
-        ax2.text(1, q75, f'Q3={q75:.4f}', ha='left', va='bottom', fontsize=9, color='red')
-        
-        # Labels and title
-        ax2.set_xlabel('Percentile')
-        ax2.set_ylabel('Value')
-        ax2.set_title('Quantile Plot')
-        ax2.grid(True, alpha=0.3)
-        
+        axes[-1].set_xlabel('AdvLift')
+        fig.suptitle(f"AdvLift | {self.postprocessor.adversary.description()} | Attacked labels: {self.config.adversary.common_args.label_source}")
         plt.tight_layout()
-        
-        # Show the plot
-        # plt.show()
-        plt.savefig(f'{self.config.output_dir}/{self.config.mark}.png', dpi=300, bbox_inches='tight')
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
